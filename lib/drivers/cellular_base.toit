@@ -257,7 +257,7 @@ abstract class CellularBase implements Cellular:
 
     try:
       if operator:
-        timeout := Duration --us=(task.deadline - Time.monotonic_us)
+        timeout := Duration --us=(Task_.current.deadline - Time.monotonic_us)
         result := session.send
           COPS.manual operator.op --timeout=timeout --rat=operator.rat
 
