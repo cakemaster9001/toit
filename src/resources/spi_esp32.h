@@ -34,6 +34,7 @@ class SPIDevice : public Resource {
   TAG(SPIDevice);
   SPIDevice(ResourceGroup* group, spi_device_handle_t handle, int dc)
     : Resource(group)
+    , bus_aquired(bus_status::FREE) 
     , _handle(handle)
     , _dc(dc) {
   }
@@ -49,6 +50,14 @@ class SPIDevice : public Resource {
   uint8_t* buffer() {
     return _buffer;
   }
+  
+  enum class bus_status {
+    FREE = 0,
+    AQUIRED, 
+    MANUALLY_AQUIRED
+  };
+
+  bus_status bus_aquired;
 
  private:
   spi_device_handle_t _handle;

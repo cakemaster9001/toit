@@ -123,8 +123,7 @@ interface Device extends serial.Device:
     $address to set the values.
 
   When $keep_cs_active is true, then the chip select pin is kept active
-    after the transfer. This functionality is only allowed when the
-    bus is reserved for this device. See $with_reserved_bus.
+    after the transfer.
   */
   transfer
       data/ByteArray
@@ -137,18 +136,26 @@ interface Device extends serial.Device:
       --keep_cs_active/bool=false
 
   /**
-  Reserves the bus for this device while executing the given $block.
-
-  Starts by acquiring the bus. Once that's succeeded, executes the $block. Finally, releases
-    the bus before returning.
+  Reserves the bus for this device. 
 
   Reserving the bus can be useful in two contexts:
-  1. The CS pin is controlled by the user. Since the hardware only supports a limited number of
-    automatic CS pins, it might be necessary to set some CS pins by hand. This should be done
-    after the bus has been reserved.
-  2. When using the `--keep_cs_active` flag of the $transfer function, the bus must be reserved.
+  1. The device is the only device on the bus. When only a single device is 
+     using the bus, then the reservation of the bus will speed up the spi 
+     transactions.
+  2. The user will send multiple messages to the same device without swithing to
+     a different device. This will speed up the excecution time of the spi 
+     transactions.
   */
-  with_reserved_bus [block]
+  reserve_bus
+
+  /**
+  Releases the manual reservation of the bus.
+
+  Releasing the bus is nessesary if the user wants to communicate with 
+  a different device on the bus and has previously reserved the bus. 
+  */
+
+  release_bus
 
   /** Closes this SPI device and releases resources associated with it. */
   close
@@ -201,19 +208,18 @@ class Device_ implements Device:
       --command/int=0
       --address/int=0
       --keep_cs_active/bool=false:
-    if keep_cs_active and not owning_bus_: throw "INVALID_STATE"
+      
     return spi_transfer_ device_ data command address from to read dc keep_cs_active
 
-  /** See $Device.with_reserved_bus. */
-  with_reserved_bus [block]:
+  /** See $Device.reserve_bus. */
+  reserve_bus:
     spi_.reservation_mutex_.do:
       spi_acquire_bus_ device_
-      owning_bus_ = true
-      try:
-        block.call
-      finally:
-        owning_bus_ = false
-        spi_release_bus_ device_
+
+  /** See $Device.release_bus. */
+  release_bus:
+    spi_.reservation_mutex_.do:
+      spi_release_bus_ device_
 
 /** Register description of a device connected to an SPI bus. */
 class Registers extends serial.Registers:

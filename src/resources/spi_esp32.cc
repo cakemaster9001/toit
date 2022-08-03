@@ -68,6 +68,30 @@ class SPIResourceGroup : public ResourceGroup {
   int _dma_chan;
 };
 
+static esp_err_t aquire_bus(SPIDevice* device) {
+  
+  //Early out
+  if (device->bus_aquired != device->bus_status::FREE) {
+    return ESP_OK;
+  }
+
+  esp_err_t err = spi_device_acquire_bus(device->handle(), portMAX_DELAY);
+  if (err == ESP_OK) {
+    device->bus_aquired = device->bus_status::AQUIRED;
+  }
+
+  return err;
+}
+
+static void release_bus(SPIDevice* device) {
+
+  //Only free if bus is automatically aquired
+  if (device->bus_aquired == device->bus_status::AQUIRED) {
+    spi_device_release_bus(device->handle());
+    device->bus_aquired = device->bus_status::FREE;
+  }
+}
+
 MODULE_IMPLEMENTATION(spi, MODULE_SPI);
 
 PRIMITIVE(init) {
@@ -214,7 +238,16 @@ PRIMITIVE(transfer) {
   size_t length = to - from;
 
   uint32_t flags = 0;
-  if (keep_cs_active) flags |= SPI_TRANS_CS_KEEP_ACTIVE;
+  esp_err_t err = ESP_OK;
+
+  if (keep_cs_active) {
+    flags |= SPI_TRANS_CS_KEEP_ACTIVE;
+    
+    err = aquire_bus(device);
+    if (err != ESP_OK) {
+      return Primitive::os_error(err, process);
+    }
+  }
 
   spi_transaction_t trans = {
     .flags = flags,
@@ -224,7 +257,12 @@ PRIMITIVE(transfer) {
     .tx_buffer = tx.address() + from,
   };
 
+  if (device->dc() != -1) {
+    trans.user = (void*)((device->dc() << 8) | dc);
+  }
+
   bool using_buffer = false;
+
   if (read) {
     if (length <= SPIDevice::BUFFER_SIZE) {
       trans.rx_buffer = device->buffer();
@@ -233,19 +271,30 @@ PRIMITIVE(transfer) {
       // Reuse buffer (no need for memcpy, but is slightly slower).
       trans.rx_buffer = tx.address() + from;
     }
-  }
+ }
 
-  if (device->dc() != -1) {
-    trans.user = (void*)((device->dc() << 8) | dc);
-  }
+  //Tx only transaction
+  err = spi_device_queue_trans(device->handle(), &trans, portMAX_DELAY);
 
-  esp_err_t err = spi_device_polling_transmit(device->handle(), &trans);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
   }
 
-  if (using_buffer) {
-    memcpy(tx.address() + from, trans.rx_buffer, length);
+  if (read) {
+    spi_transaction_t* trans_p = &trans;
+    //Wait for result
+    err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
+    if (err != ESP_OK) {
+      return Primitive::os_error(err, process);
+    }
+
+    if (using_buffer) {
+      memcpy(tx.address() + from, trans.rx_buffer, length);
+    }
+  }
+
+  if (!keep_cs_active) {
+    release_bus(device);
   }
 
   return process->program()->null_object();
@@ -253,19 +302,32 @@ PRIMITIVE(transfer) {
 
 PRIMITIVE(acquire_bus) {
   ARGS(SPIDevice, device);
-  esp_err_t err = spi_device_acquire_bus(device->handle(), portMAX_DELAY);
+  esp_err_t err = aquire_bus(device);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
   }
+
+  //stop automatic aquisition of bus in transfer primitive
+  device->bus_aquired = device->bus_status::MANUALLY_AQUIRED;
   return process->program()->null_object();
 }
 
 PRIMITIVE(release_bus) {
   ARGS(SPIDevice, device);
-  spi_device_release_bus(device->handle());
+  
+  if (device->bus_aquired == device->bus_status::MANUALLY_AQUIRED) {
+    device->bus_aquired = device->bus_status::AQUIRED;
+    release_bus(device);
+  }
+
   return process->program()->null_object();
 }
+
+
+
 
 } // namespace toit
 
 #endif // TOIT_FREERTOS
+
+
