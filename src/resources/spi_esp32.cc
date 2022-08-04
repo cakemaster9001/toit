@@ -242,6 +242,17 @@ PRIMITIVE(transfer) {
   esp_err_t err = ESP_OK;
 
 
+  static spi_transaction_t trans;
+  static spi_transaction_t* trans_p = null;
+
+  if (trans_p != null) {
+    //Finish last transmission
+    err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
+    if (err != ESP_OK) {
+      return Primitive::os_error(err, process);
+    }
+  }
+
   if (keep_cs_active) {
     flags |= SPI_TRANS_CS_KEEP_ACTIVE;
     
@@ -251,15 +262,6 @@ PRIMITIVE(transfer) {
     }
   }
 
-  static spi_transaction_t trans;
-  static spi_transaction_t* trans_p = null;
-
-  if (trans_p != null) {
-    err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
-    if (err != ESP_OK) {
-      return Primitive::os_error(err, process);
-    }
-  }
 
   trans_p = &trans;
   trans = spi_transaction_t {
@@ -287,14 +289,13 @@ PRIMITIVE(transfer) {
  }
 
   //Tx only transaction
-  
   err = spi_device_queue_trans(device->handle(), trans_p, portMAX_DELAY);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
   }
 
-  //Wait for result
   if (read || !keep_cs_active) {
+    //Wait for result
     err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
     if (err != ESP_OK) {
       return Primitive::os_error(err, process);

@@ -136,9 +136,9 @@ interface Device extends serial.Device:
       --keep_cs_active/bool=false
 
   /**
-  Aquires the bus for this device. 
+  Reserve the bus for this device. 
 
-  Aquiring the bus can be useful in two contexts:
+  Reserving the bus can be useful in two contexts:
   1. The device is the only device on the bus. When only a single device is 
      using the bus, then the reservation of the bus will speed up the spi 
      transactions.
@@ -146,7 +146,7 @@ interface Device extends serial.Device:
      a different device. This will speed up the excecution time of the spi 
      transactions.
   */
-  aquire_bus
+  reserve_bus
 
   /**
   Releases the manual reservation of the bus.
@@ -211,8 +211,8 @@ class Device_ implements Device:
       
     return spi_transfer_ device_ data command address from to read dc keep_cs_active
 
-  /** See $Device.aquire_bus. */
-  aquire_bus:
+  /** See $Device.reserve_bus. */
+  reserve_bus:
     spi_.reservation_mutex_.do:
       spi_acquire_bus_ device_
 
