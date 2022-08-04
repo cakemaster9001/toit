@@ -235,10 +235,12 @@ PRIMITIVE(transfer) {
 
   if (from < 0 || from > to || to > tx.length()) OUT_OF_BOUNDS;
 
+
   size_t length = to - from;
 
   uint32_t flags = 0;
   esp_err_t err = ESP_OK;
+
 
   if (keep_cs_active) {
     flags |= SPI_TRANS_CS_KEEP_ACTIVE;
@@ -249,7 +251,18 @@ PRIMITIVE(transfer) {
     }
   }
 
-  spi_transaction_t trans = {
+  static spi_transaction_t trans;
+  static spi_transaction_t* trans_p = null;
+
+  if (trans_p != null) {
+    err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
+    if (err != ESP_OK) {
+      return Primitive::os_error(err, process);
+    }
+  }
+
+  trans_p = &trans;
+  trans = spi_transaction_t {
     .flags = flags,
     .cmd = uint16(command),
     .addr = uint64(address),
@@ -274,24 +287,26 @@ PRIMITIVE(transfer) {
  }
 
   //Tx only transaction
-  err = spi_device_queue_trans(device->handle(), &trans, portMAX_DELAY);
-
+  
+  err = spi_device_queue_trans(device->handle(), trans_p, portMAX_DELAY);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
   }
 
-  if (read) {
-    spi_transaction_t* trans_p = &trans;
-    //Wait for result
+  //Wait for result
+  if (read || !keep_cs_active) {
     err = spi_device_get_trans_result(device->handle(), &trans_p, portMAX_DELAY);
     if (err != ESP_OK) {
       return Primitive::os_error(err, process);
     }
-
+    
+    trans_p = null;
+    
     if (using_buffer) {
       memcpy(tx.address() + from, trans.rx_buffer, length);
     }
   }
+
 
   if (!keep_cs_active) {
     release_bus(device);
