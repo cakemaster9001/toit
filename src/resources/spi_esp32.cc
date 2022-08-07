@@ -29,6 +29,7 @@
 #include "../event_sources/system_esp32.h"
 
 #include "spi_esp32.h"
+#include <type_traits>
 
 namespace toit {
 
@@ -91,6 +92,7 @@ static void release_bus(SPIDevice* device) {
     device->bus_aquired = device->bus_status::FREE;
   }
 }
+
 
 MODULE_IMPLEMENTATION(spi, MODULE_SPI);
 
@@ -260,6 +262,8 @@ PRIMITIVE(transfer) {
     if (err != ESP_OK) {
       return Primitive::os_error(err, process);
     }
+
+    device->bus_aquired |= device->bus_status::AUTOMATICLY_AQUIRED;
   }
 
 
@@ -310,6 +314,7 @@ PRIMITIVE(transfer) {
 
 
   if (!keep_cs_active) {
+    device->bus_aquired &= ~(device->bus_status::AUTOMATICLY_AQUIRED);
     release_bus(device);
   }
 
@@ -323,18 +328,16 @@ PRIMITIVE(acquire_bus) {
     return Primitive::os_error(err, process);
   }
 
-  //stop automatic aquisition of bus in transfer primitive
-  device->bus_aquired = device->bus_status::MANUALLY_AQUIRED;
+  device->bus_aquired |= device->bus_status::MANUALLY_AQUIRED;
+
   return process->program()->null_object();
 }
 
 PRIMITIVE(release_bus) {
   ARGS(SPIDevice, device);
   
-  if (device->bus_aquired == device->bus_status::MANUALLY_AQUIRED) {
-    device->bus_aquired = device->bus_status::AQUIRED;
-    release_bus(device);
-  }
+  device->bus_aquired &= ~(device->bus_status::MANUALLY_AQUIRED);
+  release_bus(device);
 
   return process->program()->null_object();
 }

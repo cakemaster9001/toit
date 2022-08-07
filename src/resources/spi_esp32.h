@@ -51,12 +51,6 @@ class SPIDevice : public Resource {
     return _buffer;
   }
   
-  enum class bus_status {
-    FREE = 0,
-    AQUIRED, 
-    MANUALLY_AQUIRED
-  };
-
   bus_status bus_aquired;
 
  private:
@@ -65,6 +59,56 @@ class SPIDevice : public Resource {
 
   // Pre-allocated buffer for small transfers. Must be 4-byte aligned.
   alignas(4) uint8_t _buffer[BUFFER_SIZE];
+
+ public:
+ 
+  enum class bus_status {
+    FREE = 0,
+    AQUIRED = 1 << 0,
+    AUTOMATICLY_AQUIRED = 1 << 1,
+    MANUALLY_AQUIRED = 1 << 2
+  };
+
+  friend constexpr inline SPIDevice::bus_status operator ~ (const SPIDevice::bus_status &a) {
+    using utype = typename std::underlying_type<SPIDevice::bus_status>::type;
+
+    return static_cast<SPIDevice::bus_status>(~static_cast<utype>(a));
+  }
+
+  friend constexpr inline  SPIDevice::bus_status operator | (const SPIDevice::bus_status &a, const SPIDevice::bus_status &b) {
+      using utype = typename std::underlying_type<SPIDevice::bus_status>::type;
+
+      return static_cast<SPIDevice::bus_status>(static_cast<utype>(a) | static_cast<utype>(b));
+  }
+
+  friend constexpr inline  SPIDevice::bus_status operator & (const SPIDevice::bus_status &a, const SPIDevice::bus_status &b) {
+      using utype = typename std::underlying_type<SPIDevice::bus_status>::type;
+      return static_cast<SPIDevice::bus_status>(static_cast<utype>(a) & static_cast<utype>(b));
+  }
+
+  friend constexpr inline  SPIDevice::bus_status operator ^ (const SPIDevice::bus_status &a, const SPIDevice::bus_status &b) {
+      using utype = typename std::underlying_type<SPIDevice::bus_status>::type;
+      return static_cast<SPIDevice::bus_status>(static_cast<utype>(a) ^ static_cast<utype>(b));
+  }
+
+
+  friend inline  SPIDevice::bus_status& operator |= (SPIDevice::bus_status& lhs, const SPIDevice::bus_status& rhs) {
+    
+    lhs = lhs | rhs;
+    return lhs;
+  }
+
+  friend inline  SPIDevice::bus_status& operator &= (SPIDevice::bus_status& lhs, const SPIDevice::bus_status& rhs) {
+    
+    lhs = lhs & rhs;
+    return lhs;
+  }
+
+  friend inline  SPIDevice::bus_status& operator ^= (SPIDevice::bus_status& lhs, const SPIDevice::bus_status& rhs) {
+    
+    lhs = lhs ^ rhs;
+    return lhs;
+  }
 };
 
 } // namespace toit
